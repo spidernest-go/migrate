@@ -57,6 +57,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 		SELECT * FROM "__meta"
 		LIMIT 1
 		OFFSET (SELECT COUNT(*) FROM "__meta")`)
+		OFFSET (SELECT COUNT(*) FROM "__meta")-1`)
 	if err != nil {
 		return nil, err
 	}
