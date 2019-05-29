@@ -14,9 +14,9 @@ var (
 )
 
 type Migration struct {
-	Applied time.Time
-	Version uint8
-	Name    string
+	Applied time.Time `db:"applied"`
+	Version uint8     `db:"version"`
+	Name    string    `db:"migration"`
 }
 
 func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv ...interface{}) error {
@@ -43,11 +43,7 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 
 	// Track this migration being applied
 	// ALERT: Errors won't be allocated here simply because the migration has already been applied, so there is no point.
-	stmt, _ = db.Prepare(`
-		INSERT
-			INTO "__meta" ("version", "migration")
-			VALUES (?, ?)`)
-	stmt.Exec(version, name)
+	track(version, name, db)
 	return nil
 }
 
@@ -56,7 +52,6 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 	stmt, err := db.Prepare(`
 		SELECT * FROM "__meta"
 		LIMIT 1
-		OFFSET (SELECT COUNT(*) FROM "__meta")`)
 		OFFSET (SELECT COUNT(*) FROM "__meta")-1`)
 	if err != nil {
 		return nil, err
@@ -64,6 +59,29 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 	m := new(Migration)
 	err = stmt.QueryRow().Scan(m)
 	return m, err
+}
+
+func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Database) error {
+	for i := range r {
+		m, err := Last(db)
+		if err != nil {
+			return err
+		}
+
+		if m.Applied.Before(t[i]) || m.Version < v[i] {
+			stmt, err := db.Prepare(r[i])
+			if err != nil {
+				return err
+			}
+			_, err = stmt.Exec()
+			if err != nil {
+				return err
+			}
+			track(v[i], n[i], db)
+		}
+	}
+
+	return nil
 }
 
 func checkForMetaTable(database string, db sqlbuilder.Database) error {
@@ -99,4 +117,14 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
 		return err
 	}
 
+}
+
+// Track this migration being applied
+func track(version uint8, name string, db sqlbuilder.Database) {
+	// ALERT: Errors won't be allocated here simply because the migration has already been applied, so there is no point.
+	stmt, _ := db.Prepare(`
+		INSERT
+			INTO "__meta" ("version", "migration")
+			VALUES (?, ?)`)
+	stmt.Exec(version, name)
 }
