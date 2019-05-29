@@ -7,6 +7,11 @@ import (
 	"github.com/spidernest-go/db/lib/sqlbuilder"
 )
 
+var tableExists = false
+var (
+	tableExists = false
+	tableName   string
+)
 func checkForMetaTable(database string, db sqlbuilder.Database) error {
 	// Check if the meta table exists
 	stmt, err := db.Prepare(`
@@ -31,6 +36,9 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
 			return err
 		}
 		_, err = stmt.Exec()
+		if err == nil {
+			tableExists = true
+		}
 		return err
 	} else {
 		// Otherwise fail.
