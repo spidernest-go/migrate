@@ -20,18 +20,9 @@ type Migration struct {
 }
 
 func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv ...interface{}) error {
-	// QUEST: This could introduce a subtle bug where two different databases from different drivers of the same name won't trigger this when one of them may not have the meta table
-	// BUG: This may not work under multithreaded conditions because of global variable usage, this can be fixed by turning them into mutexes, but that will definitely make things slower.
-	if tableName != db.Name() {
-		tableExists = false
+	if err := findtable(db); err != nil {
+		return err
 	}
-	if tableExists == false {
-		err := checkForMetaTable(db.Name(), db)
-		if err != nil {
-			return err
-		}
-	}
-
 	stmt, err := db.Prepare(r)
 	if err != nil {
 		return err
@@ -62,6 +53,10 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 }
 
 func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Database) error {
+	if err := findtable(db); err != nil {
+		return err
+	}
+
 	for i := range r {
 		m, err := Last(db)
 		if err != nil {
@@ -127,4 +122,20 @@ func track(version uint8, name string, db sqlbuilder.Database) {
 			INTO "__meta" ("version", "migration")
 			VALUES (?, ?)`)
 	stmt.Exec(version, name)
+}
+
+func findtable(db sqlbuilder.Database) error {
+	// QUEST: This could introduce a subtle bug where two different databases from different drivers of the same name won't trigger this when one of them may not have the meta table
+	// BUG: This may not work under multithreaded conditions because of global variable usage, this can be fixed by turning them into mutexes, but that will definitely make things slower.
+	if tableName != db.Name() {
+		tableExists = false
+	}
+	if tableExists == false {
+		err := checkForMetaTable(db.Name(), db)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
