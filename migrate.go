@@ -3,6 +3,7 @@ package migrate
 import (
 	"database/sql"
 	"io"
+	"time"
 
 	"github.com/spidernest-go/db/lib/sqlbuilder"
 )
@@ -12,14 +13,20 @@ var (
 	tableName   string
 )
 
-func Apply(version uint8, name, database string, r io.Reader, db sqlbuilder.Database, argv ...interface{}) error {
+type Migration struct {
+	Applied time.Time
+	Version uint8
+	Name    string
+}
+
+func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv ...interface{}) error {
 	// QUEST: This could introduce a subtle bug where two different databases from different drivers of the same name won't trigger this when one of them may not have the meta table
 	// BUG: This may not work under multithreaded conditions because of global variable usage, this can be fixed by turning them into mutexes, but that will definitely make things slower.
 	if tableName != db.Name() {
 		tableExists = false
 	}
 	if tableExists == false {
-		err := checkForMetaTable(database, db)
+		err := checkForMetaTable(db.Name(), db)
 		if err != nil {
 			return err
 		}
@@ -42,6 +49,20 @@ func Apply(version uint8, name, database string, r io.Reader, db sqlbuilder.Data
 			VALUES (?, ?)`)
 	stmt.Exec(version, name)
 	return nil
+}
+
+// Last returns the last migration applied to the database
+func Last(db sqlbuilder.Database) (*Migration, error) {
+	stmt, err := db.Prepare(`
+		SELECT * FROM "__meta"
+		LIMIT 1
+		OFFSET (SELECT COUNT(*) FROM "__meta")`)
+	if err != nil {
+		return nil, err
+	}
+	m := new(Migration)
+	err = stmt.QueryRow().Scan(m)
+	return m, err
 }
 
 func checkForMetaTable(database string, db sqlbuilder.Database) error {
