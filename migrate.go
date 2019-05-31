@@ -44,14 +44,21 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 // Last returns the last migration applied to the database
 func Last(db sqlbuilder.Database) (*Migration, error) {
 	stmt, err := db.Prepare(`
-		SELECT * FROM "__meta"
-		LIMIT 1
-		OFFSET (SELECT COUNT(*) FROM "__meta")-1`)
+			SELECT * FROM __meta
+				WHERE applied IN (
+	    			SELECT MAX( applied )
+	      			FROM __meta
+	  			)
+	  		ORDER BY applied DESC
+	  		LIMIT 1;`)
 	if err != nil {
 		return nil, err
 	}
 	m := new(Migration)
-	err = stmt.QueryRow().Scan(m)
+	err = stmt.QueryRow().Scan(&m.Applied, &m.Version, &m.Name)
+	if err == sql.ErrNoRows {
+		err = nil
+	}
 	return m, err
 }
 
