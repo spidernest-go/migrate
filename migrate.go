@@ -125,7 +125,6 @@ func track(version uint8, name string, db sqlbuilder.Database) {
 	// ALERT: Errors won't be allocated here simply because the migration has already been applied, so there is no point.
 	stmt, _ := db.Prepare(`
 		INSERT
-			INTO "__meta" ("version", "migration")
 			INTO __meta (version, migration)
 			VALUES (?, ?)`)
 	stmt.Exec(version, name)
