@@ -88,7 +88,7 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 func checkForMetaTable(database string, db sqlbuilder.Database) error {
 	// Check if the meta table exists
 	stmt, err := db.Prepare(`
-        SELECT * FROM information_schema.tables
+        SELECT VERSION FROM information_schema.tables
         WHERE table_schema = ?
             AND table_name = ?
         LIMIT 1;`)
@@ -97,7 +97,9 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
 	}
 
 	// If it doesn't, create it
-	_, err = stmt.Query(database)
+	r := stmt.QueryRow(database, "__meta")
+	t := *new(int64)
+	err = r.Scan(&t)
 	if err == sql.ErrNoRows {
 		stmt, err := db.Prepare(`
             CREATE TABLE __meta (
