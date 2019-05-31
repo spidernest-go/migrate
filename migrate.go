@@ -84,7 +84,7 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
 	stmt, err := db.Prepare(`
         SELECT * FROM information_schema.tables
         WHERE table_schema = ?
-            AND table_name = "__meta"
+            AND table_name = ?
         LIMIT 1;`)
 	if err != nil {
 		return err
@@ -94,10 +94,10 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
 	_, err = stmt.Query(database)
 	if err == sql.ErrNoRows {
 		stmt, err := db.Prepare(`
-            CREATE TABLE "__meta" (
-                "applied" DATETIME NOT NULL DEFAULT NOW(),
-                "version" TINYINT UNSIGNED,
-                "migration" VARCHAR(256)
+            CREATE TABLE __meta (
+                applied DATETIME NOT NULL DEFAULT NOW(),
+                version TINYINT UNSIGNED,
+                migration VARCHAR(256)
                 )`)
 		if err != nil {
 			return err
@@ -120,6 +120,7 @@ func track(version uint8, name string, db sqlbuilder.Database) {
 	stmt, _ := db.Prepare(`
 		INSERT
 			INTO "__meta" ("version", "migration")
+			INTO __meta (version, migration)
 			VALUES (?, ?)`)
 	stmt.Exec(version, name)
 }
