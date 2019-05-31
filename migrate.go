@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"bytes"
 	"database/sql"
 	"io"
 	"time"
@@ -23,7 +24,9 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	if err := findtable(db); err != nil {
 		return err
 	}
-	stmt, err := db.Prepare(r)
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(r)
+	stmt, err := db.Prepare(buf.String())
 	if err != nil {
 		return err
 	}
@@ -63,8 +66,11 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 			return err
 		}
 
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(r[i])
+
 		if m.Applied.Before(t[i]) || m.Version < v[i] {
-			stmt, err := db.Prepare(r[i])
+			stmt, err := db.Prepare(buf.String())
 			if err != nil {
 				return err
 			}
