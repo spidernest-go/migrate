@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	tableExists = false
-	tableName   string
+	tableExists  = false
+	databaseName string
 )
 
 type Migration struct {
@@ -128,7 +128,7 @@ func track(version uint8, name string, db sqlbuilder.Database) {
 func findtable(db sqlbuilder.Database) error {
 	// QUEST: This could introduce a subtle bug where two different databases from different drivers of the same name won't trigger this when one of them may not have the meta table
 	// BUG: This may not work under multithreaded conditions because of global variable usage, this can be fixed by turning them into mutexes, but that will definitely make things slower.
-	if tableName != db.Name() {
+	if databaseName != db.Name() {
 		tableExists = false
 	}
 	if tableExists == false {
