@@ -41,9 +41,15 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 // Last returns the last migration applied to the database
 func Last(db sqlbuilder.Database) (*Migration, error) {
 	stmt, err := db.Prepare(`
-		SELECT * FROM "__meta"
-		LIMIT 1
-		OFFSET (SELECT COUNT(*) FROM "__meta")-1`)
+				SELECT 
+					*
+				FROM 
+					__meta
+				ORDER BY 
+					id DESC
+				LIMIT
+					1;
+				`)
 	if err != nil {
 		return nil, err
 	}
