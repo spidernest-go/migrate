@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"bytes"
 	"database/sql"
 	"io"
 	"time"
@@ -9,8 +10,8 @@ import (
 )
 
 var (
-	tableExists = false
-	tableName   string
+	tableExists  = false
+	databaseName string
 )
 
 type Migration struct {
@@ -23,7 +24,9 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	if err := findtable(db); err != nil {
 		return err
 	}
-	stmt, err := db.Prepare(r)
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(r)
+	stmt, err := db.Prepare(buf.String())
 	if err != nil {
 		return err
 	}
@@ -41,14 +44,21 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 // Last returns the last migration applied to the database
 func Last(db sqlbuilder.Database) (*Migration, error) {
 	stmt, err := db.Prepare(`
-		SELECT * FROM "__meta"
-		LIMIT 1
-		OFFSET (SELECT COUNT(*) FROM "__meta")-1`)
+			SELECT * FROM __meta
+				WHERE applied IN (
+	    			SELECT MAX( applied )
+	      			FROM __meta
+	  			)
+	  		ORDER BY applied DESC
+	  		LIMIT 1;`)
 	if err != nil {
 		return nil, err
 	}
 	m := new(Migration)
-	err = stmt.QueryRow().Scan(m)
+	err = stmt.QueryRow().Scan(&m.Applied, &m.Version, &m.Name)
+	if err == sql.ErrNoRows {
+		err = nil
+	}
 	return m, err
 }
 
@@ -63,8 +73,11 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 			return err
 		}
 
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(r[i])
+
 		if m.Applied.Before(t[i]) || m.Version < v[i] {
-			stmt, err := db.Prepare(r[i])
+			stmt, err := db.Prepare(buf.String())
 			if err != nil {
 				return err
 			}
@@ -82,22 +95,24 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 func checkForMetaTable(database string, db sqlbuilder.Database) error {
 	// Check if the meta table exists
 	stmt, err := db.Prepare(`
-        SELECT * FROM information_schema.tables
+        SELECT VERSION FROM information_schema.tables
         WHERE table_schema = ?
-            AND table_name = "__meta"
+            AND table_name = ?
         LIMIT 1;`)
 	if err != nil {
 		return err
 	}
 
 	// If it doesn't, create it
-	_, err = stmt.Query(database)
+	r := stmt.QueryRow(database, "__meta")
+	t := *new(int64)
+	err = r.Scan(&t)
 	if err == sql.ErrNoRows {
 		stmt, err := db.Prepare(`
-            CREATE TABLE "__meta" (
-                "applied" DATETIME NOT NULL DEFAULT NOW(),
-                "version" TINYINT UNSIGNED,
-                "migration" VARCHAR(256)
+            CREATE TABLE __meta (
+                applied DATETIME NOT NULL DEFAULT NOW(),
+                version TINYINT UNSIGNED,
+                migration VARCHAR(256)
                 )`)
 		if err != nil {
 			return err
@@ -119,7 +134,7 @@ func track(version uint8, name string, db sqlbuilder.Database) {
 	// ALERT: Errors won't be allocated here simply because the migration has already been applied, so there is no point.
 	stmt, _ := db.Prepare(`
 		INSERT
-			INTO "__meta" ("version", "migration")
+			INTO __meta (version, migration)
 			VALUES (?, ?)`)
 	stmt.Exec(version, name)
 }
@@ -127,7 +142,7 @@ func track(version uint8, name string, db sqlbuilder.Database) {
 func findtable(db sqlbuilder.Database) error {
 	// QUEST: This could introduce a subtle bug where two different databases from different drivers of the same name won't trigger this when one of them may not have the meta table
 	// BUG: This may not work under multithreaded conditions because of global variable usage, this can be fixed by turning them into mutexes, but that will definitely make things slower.
-	if tableName != db.Name() {
+	if databaseName != db.Name() {
 		tableExists = false
 	}
 	if tableExists == false {
