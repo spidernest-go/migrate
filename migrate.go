@@ -89,7 +89,7 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 				return fmt.Errorf("migration 0 does not occur after the last migration in the database")
 			}
 		} else {
-			if !(t[i-1].Before(t[i]) || v[i-1] < v[i]) {
+			if !(t[i-1].Before(t[i]) && v[i-1] < v[i]) {
 				return fmt.Errorf("migration %d does not occur after migration %d", i, i-1)
 			}
 		}
