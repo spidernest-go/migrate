@@ -84,8 +84,8 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 		return err
 	}
 	for i := range r {
-		if i == 0 && m != nil { // first migraiton should check the last migration in the database
-			if !(m.Applied.Before(t[0]) || m.Version < v[0]) {
+		if i == 0 { // first migraiton should check the last migration in the database
+			if m != nil && !(m.Applied.Before(t[0]) || m.Version < v[0]) {
 				return fmt.Errorf("migration 0 does not occur after the last migration in the database")
 			}
 		} else {
