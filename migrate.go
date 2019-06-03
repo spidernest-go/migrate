@@ -58,10 +58,12 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 	m := new(Migration)
 	err = stmt.QueryRow().Scan(&m.Applied, &m.Version, &m.Name)
 	if err == sql.ErrNoRows {
-		m = nil // if nothing was queried then we dont actually want to return a migration
-		err = nil
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed querying last migration: %v", err)
+	} else {
+		return m, nil
 	}
-	return m, fmt.Errorf("failed querying last migration: %v", err)
 }
 
 func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Database) error {
@@ -146,9 +148,11 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
 		}
 		tableExists = true
 		return nil
-	} else {
+	} else if err != nil {
 		// Otherwise fail.
 		return fmt.Errorf("error scanning meta table: %v", err)
+	} else {
+		return nil
 	}
 
 }
