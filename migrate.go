@@ -43,6 +43,9 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 
 // Last returns the last migration applied to the database
 func Last(db sqlbuilder.Database) (*Migration, error) {
+	if err := findtable(db); err != nil {
+		return nil, err
+	}
 	stmt, err := db.Prepare(`
 				SELECT 
 					*
