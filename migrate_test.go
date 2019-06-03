@@ -19,23 +19,9 @@ var Settings = mysql.ConnectionURL{
 	User:     os.Getenv("MYSQL_USER"),
 	Password: os.Getenv("MYSQL_PASS"),
 }
-
-var MigrationName = []string{
-	"Creating the users table.",
-	"Root admin created.",
-	"Add column 'admin' which determines administrative status.",
-	"Give 'Root' admin status.",
-}
-var GoodEntry = []*bytes.Buffer{
-	bytes.NewBufferString("CREATE TABLE users(username TEXT NOT NULL)"),
-	bytes.NewBufferString("INSERT INTO users(username) VALUES (\"root\")"),
-	bytes.NewBufferString("ALTER TABLE users ADD admin BOOL NOT NULL DEFAULT 0"),
-	bytes.NewBufferString("UPDATE users SET admin=1 WHERE username=\"root\""),
-}
-
-var BadEntry = []*bytes.Buffer{
-	bytes.NewBufferString("just a bad sql statement :)"),
-}
+var MigrationName []string
+var GoodEntry []*bytes.Buffer
+var BadEntry []*bytes.Buffer
 
 func TestMain(m *testing.M) {
 	var err error
@@ -50,6 +36,21 @@ func TestMain(m *testing.M) {
 func clear() {
 	Builder.Exec("DROP TABLE __meta")
 	Builder.Exec("DROP TABLE users")
+	MigrationName = []string{
+		"Creating the users table.",
+		"Root admin created.",
+		"Add column 'admin' which determines administrative status.",
+		"Give 'Root' admin status.",
+	}
+	GoodEntry = []*bytes.Buffer{
+		bytes.NewBufferString("CREATE TABLE users(username TEXT NOT NULL)"),
+		bytes.NewBufferString("INSERT INTO users(username) VALUES (\"root\")"),
+		bytes.NewBufferString("ALTER TABLE users ADD admin BOOL NOT NULL DEFAULT 0"),
+		bytes.NewBufferString("UPDATE users SET admin=1 WHERE username=\"root\""),
+	}
+	BadEntry = []*bytes.Buffer{
+		bytes.NewBufferString("just a bad sql statement :)"),
+	}
 }
 
 func TestApply(t *testing.T) {
