@@ -64,30 +64,51 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 }
 
 func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Database) error {
+	// confirm table exists
 	if err := findtable(db); err != nil {
 		return err
 	}
 
+	// confirm valid migrations passed
+	if len(v) == 0 || len(n) == 0 || len(t) == 0 || len(r) == 0 {
+		return fmt.Errorf("an argument array passed into function")
+	}
+	if len(v) != len(n) && len(n) != len(t) && len(t) != len(r) {
+		return fmt.Errorf("argument array lengths are uneven")
+	}
+	m, err := Last(db)
+	if err != nil {
+		return err
+	}
 	for i := range r {
-		m, err := Last(db)
-		if err != nil {
-			return err
+		if i == 0 && m != nil { // first migraiton should check the last migration in the database
+			if !(m.Applied.Before(t[0]) || m.Version < v[0]) {
+				return fmt.Errorf("migration 0 does not occur after the last migration in the database")
+			}
+		} else {
+			if !(t[i-1].Before(t[i]) || v[i-1] < v[i]) {
+				return fmt.Errorf("migration %d does not occur after migration %d", i, i-1)
+			}
 		}
+	}
 
+	for i := range r {
+		// read in migration
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(r[i])
 
-		if m.Applied.Before(t[i]) || m.Version < v[i] {
-			stmt, err := db.Prepare(buf.String())
-			if err != nil {
-				return err
-			}
-			_, err = stmt.Exec()
-			if err != nil {
-				return err
-			}
-			track(v[i], n[i], db)
+		// apply migration
+		stmt, err := db.Prepare(buf.String())
+		if err != nil {
+			return fmt.Errorf("migration %d failed preparing statement %s: %v", i, buf.String(), err)
 		}
+		_, err = stmt.Exec()
+		if err != nil {
+			return fmt.Errorf("migration %d failed executing statement %s: %v", i, buf.String(), err)
+		}
+
+		// track migration
+		track(v[i], n[i], db)
 	}
 
 	return nil
