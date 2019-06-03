@@ -44,7 +44,6 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 // Last returns the last migration applied to the database
 func Last(db sqlbuilder.Database) (*Migration, error) {
 	stmt, err := db.Prepare(`
-<<<<<<< HEAD
 				SELECT 
 					*
 				FROM 
@@ -54,15 +53,6 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 				LIMIT
 					1;
 				`)
-=======
-			SELECT * FROM __meta
-				WHERE applied IN (
-	    			SELECT MAX( applied )
-	      			FROM __meta
-	  			)
-	  		ORDER BY applied DESC
-	  		LIMIT 1;`)
->>>>>>> 6b49e3adedb25fb49c201816537345d03a3ce524
 	if err != nil {
 		return nil, err
 	}
