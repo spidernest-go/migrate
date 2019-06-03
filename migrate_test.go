@@ -114,6 +114,7 @@ func TestUpTo(t *testing.T) {
 	assert.Error(t, UpTo(versions, MigrationName, times, readers, Builder), "We expect that the statements will fail on migration 1 from the bad entry.")
 
 	// Good request
+	clear() // fix buffers for whatever reason
 	versions = []uint8{0, 1, 2, 3}
 	times = []time.Time{basetime.AddDate(0, 0, 0), basetime.AddDate(1, 0, 0), basetime.AddDate(2, 0, 0), basetime.AddDate(3, 0, 0)}
 	readers = []io.Reader{GoodEntry[0], GoodEntry[1], GoodEntry[2], GoodEntry[3]}
