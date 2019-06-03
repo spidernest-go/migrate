@@ -57,6 +57,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 	m := new(Migration)
 	err = stmt.QueryRow().Scan(&m.Applied, &m.Version, &m.Name)
 	if err == sql.ErrNoRows {
+		m = nil // if nothing was queried then we dont actually want to return a migration
 		err = nil
 	}
 	return m, err
