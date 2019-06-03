@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"io"
 	"time"
 
@@ -28,11 +29,11 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	buf.ReadFrom(r)
 	stmt, err := db.Prepare(buf.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed preparing statement '%s': %v", buf.String(), err)
 	}
 	_, err = stmt.Exec(argv...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed executing query '%s': %v", buf.String(), err)
 	}
 
 	// Track this migration being applied
@@ -43,50 +44,74 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 
 // Last returns the last migration applied to the database
 func Last(db sqlbuilder.Database) (*Migration, error) {
-	stmt, err := db.Prepare(`
-			SELECT * FROM __meta
-				WHERE applied IN (
-	    			SELECT MAX( applied )
-	      			FROM __meta
-	  			)
-	  		ORDER BY applied DESC
-	  		LIMIT 1;`)
-	if err != nil {
+	if err := findtable(db); err != nil {
 		return nil, err
+	}
+	stmt, err := db.Prepare(`
+				SELECT *
+				FROM __meta
+				ORDER BY applied DESC
+				LIMIT 1`) // TODO: confirm as optimized as possible with ORDER BY statement existing
+	if err != nil {
+		return nil, fmt.Errorf("failed preparing meta table lookup statement: %v", err)
 	}
 	m := new(Migration)
 	err = stmt.QueryRow().Scan(&m.Applied, &m.Version, &m.Name)
 	if err == sql.ErrNoRows {
-		err = nil
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed querying last migration: %v", err)
+	} else {
+		return m, nil
 	}
-	return m, err
 }
 
 func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Database) error {
+	// confirm table exists
 	if err := findtable(db); err != nil {
 		return err
 	}
 
+	// confirm valid migrations passed
+	if len(v) == 0 || len(n) == 0 || len(t) == 0 || len(r) == 0 {
+		return fmt.Errorf("an argument array passed into function")
+	}
+	if len(v) != len(n) && len(n) != len(t) && len(t) != len(r) {
+		return fmt.Errorf("argument array lengths are uneven")
+	}
+	m, err := Last(db)
+	if err != nil {
+		return err
+	}
 	for i := range r {
-		m, err := Last(db)
-		if err != nil {
-			return err
+		if i == 0 { // first migraiton should check the last migration in the database
+			if m != nil && !(m.Applied.Before(t[0]) || m.Version < v[0]) {
+				return fmt.Errorf("migration 0 does not occur after the last migration in the database")
+			}
+		} else {
+			if !(t[i-1].Before(t[i]) && v[i-1] < v[i]) {
+				return fmt.Errorf("migration %d does not occur after migration %d", i, i-1)
+			}
 		}
+	}
 
+	for i := range r {
+		// read in migration
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(r[i])
 
-		if m.Applied.Before(t[i]) || m.Version < v[i] {
-			stmt, err := db.Prepare(buf.String())
-			if err != nil {
-				return err
-			}
-			_, err = stmt.Exec()
-			if err != nil {
-				return err
-			}
-			track(v[i], n[i], db)
+		// apply migration
+		stmt, err := db.Prepare(buf.String())
+		if err != nil {
+			return fmt.Errorf("migration %d failed preparing statement %s: %v", i, buf.String(), err)
 		}
+		_, err = stmt.Exec()
+		if err != nil {
+			return fmt.Errorf("migration %d failed executing statement %s: %v", i, buf.String(), err)
+		}
+
+		// track migration
+		track(v[i], n[i], db)
 	}
 
 	return nil
@@ -100,7 +125,7 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
             AND table_name = ?
         LIMIT 1;`)
 	if err != nil {
-		return err
+		return fmt.Errorf("error preparing information_schema table query: %v", err)
 	}
 
 	// If it doesn't, create it
@@ -115,16 +140,19 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
                 migration VARCHAR(256)
                 )`)
 		if err != nil {
-			return err
+			return fmt.Errorf("error preparing meta table prepare statement: %v", err)
 		}
 		_, err = stmt.Exec()
-		if err == nil {
-			tableExists = true
+		if err != nil {
+			return fmt.Errorf("error in executing meta table creation statement: %v", err)
 		}
-		return err
-	} else {
+		tableExists = true
+		return nil
+	} else if err != nil {
 		// Otherwise fail.
-		return err
+		return fmt.Errorf("error scanning meta table: %v", err)
+	} else {
+		return nil
 	}
 
 }
