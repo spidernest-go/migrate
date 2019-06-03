@@ -52,7 +52,13 @@ func clear() {
 
 func TestApply(t *testing.T) {
 	clear()
-	assert.NoError(t, Apply(0, "some name", TestEntry, Builder))
+	assert.Error(t, Apply(0, MigrationName[0], BadEntry[0], Builder), "We expect an error here because a bad sql statement is given.")
+	assert.NoError(t, Apply(0, MigrationName[0], GoodEntry[0], Builder), "We expect no error.")
+	assert.Error(t, Apply(0, MigrationName[0], GoodEntry[0], Builder), "We expect an error here because a duplicate version number is given.")
+	assert.Error(t, Apply(1, MigrationName[0], GoodEntry[0], Builder), "We expect an error here because a duplicate migration name is given.")
+	assert.NoError(t, Apply(1, MigrationName[1], GoodEntry[1], Builder), "We expect no error.")
+	assert.NoError(t, Apply(1, MigrationName[2], GoodEntry[2], Builder), "We expect no error.")
+	assert.NoError(t, Apply(1, MigrationName[3], GoodEntry[3], Builder), "We expect no error.")
 }
 
 func TestLast(t *testing.T) {
