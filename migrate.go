@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"io"
 	"time"
 
@@ -28,11 +29,11 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	buf.ReadFrom(r)
 	stmt, err := db.Prepare(buf.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed preparing statement '%s': %v", buf.String(), err)
 	}
 	_, err = stmt.Exec(argv...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed executing query '%s': %v", buf.String(), err)
 	}
 
 	// Track this migration being applied
@@ -52,7 +53,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 				ORDER BY applied DESC
 				LIMIT 1`) // TODO: confirm as optimized as possible with ORDER BY statement existing
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed preparing meta table lookup statement: %v", err)
 	}
 	m := new(Migration)
 	err = stmt.QueryRow().Scan(&m.Applied, &m.Version, &m.Name)
@@ -60,7 +61,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 		m = nil // if nothing was queried then we dont actually want to return a migration
 		err = nil
 	}
-	return m, err
+	return m, fmt.Errorf("failed querying last migration: %v", err)
 }
 
 func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Database) error {
@@ -122,7 +123,7 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
             AND table_name = ?
         LIMIT 1;`)
 	if err != nil {
-		return err
+		return fmt.Errorf("error preparing information_schema table query: %v", err)
 	}
 
 	// If it doesn't, create it
@@ -137,16 +138,17 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
                 migration VARCHAR(256)
                 )`)
 		if err != nil {
-			return err
+			return fmt.Errorf("error preparing meta table prepare statement: %v", err)
 		}
 		_, err = stmt.Exec()
-		if err == nil {
-			tableExists = true
+		if err != nil {
+			return fmt.Errorf("error in executing meta table creation statement: %v", err)
 		}
-		return err
+		tableExists = true
+		return nil
 	} else {
 		// Otherwise fail.
-		return err
+		return fmt.Errorf("error scanning meta table: %v", err)
 	}
 
 }
