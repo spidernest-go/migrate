@@ -18,7 +18,22 @@ var Settings = mysql.ConnectionURL{
 	Password: os.Getenv("MYSQL_PASS"),
 }
 
-var TestEntry = bytes.NewBufferString("UPDATE * FROM users WHERE id = 1;")
+var MigrationName = []string{
+	"Creating the users table.",
+	"Root admin created.",
+	"Add column 'admin' which determines administrative status.",
+	"Give 'Root' admin status.",
+}
+var GoodEntry = []*bytes.Buffer{
+	bytes.NewBufferString("CREATE TABLE users(username TEXT NOT NULL)"),
+	bytes.NewBufferString("INSERT INTO users(username) VALUES (\"root\")"),
+	bytes.NewBufferString("ALTER TABLE users ADD admin BOOL NOT NULL DEFAULT 0"),
+	bytes.NewBufferString("UPDATE users SET admin=1 WHERE username=\"root\""),
+}
+
+var BadEntry = []*bytes.Buffer{
+	bytes.NewBufferString("just a bad sql statement :)"),
+}
 
 func TestMain(m *testing.M) {
 	var err error
@@ -26,13 +41,13 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	tableName = "__meta"
 	defer Builder.Close()
 	os.Exit(m.Run())
 }
 
 func clear() {
 	Builder.Exec("DROP TABLE __meta")
+	Builder.Exec("DROP TABLE users")
 }
 
 func TestApply(t *testing.T) {
