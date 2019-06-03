@@ -52,7 +52,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 				FROM 
 					__meta
 				ORDER BY 
-					id DESC
+					applied DESC
 				LIMIT
 					1;
 				`)
