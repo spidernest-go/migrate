@@ -2,8 +2,10 @@ package migrate
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/spidernest-go/db/lib/sqlbuilder"
 	"github.com/spidernest-go/db/mysql"
@@ -80,5 +82,33 @@ func TestLast(t *testing.T) {
 		assert.Equal(t, lastMigration.Version, migrationVer, "We expected the migration version in the meta table to be the same as the one we just applied.")
 	}
 	assert.NoError(t, err, "We expected no error retrieving the last migration and we expected one to exist since we just added one.")
+}
 
+func TestUpTo(t *testing.T) {
+	clear()
+	basetime := time.Now()
+
+	// Out of order versions
+	versions := []uint8{7, 1, 2, 3}
+	times := []time.Time{basetime.AddDate(0, 0, 0), basetime.AddDate(1, 0, 0), basetime.AddDate(2, 0, 0), basetime.AddDate(3, 0, 0)}
+	readers := []io.Reader{GoodEntry[0], GoodEntry[1], GoodEntry[2], GoodEntry[3]}
+	assert.Error(t, UpTo(versions, MigrationName, times, readers, Builder), "We expect this to work with no error.")
+
+	// Out of order dates
+	versions = []uint8{0, 1, 2, 3}
+	times = []time.Time{basetime.AddDate(0, 0, 0), basetime.AddDate(5, 0, 0), basetime.AddDate(2, 0, 0), basetime.AddDate(3, 0, 0)}
+	readers = []io.Reader{GoodEntry[0], GoodEntry[1], GoodEntry[2], GoodEntry[3]}
+	assert.Error(t, UpTo(versions, MigrationName, times, readers, Builder), "We expect this to work with no error.")
+
+	// Out of order versions and dates
+	versions = []uint8{7, 1, 2, 3}
+	times = []time.Time{basetime.AddDate(0, 0, 0), basetime.AddDate(5, 0, 0), basetime.AddDate(2, 0, 0), basetime.AddDate(3, 0, 0)}
+	readers = []io.Reader{GoodEntry[0], GoodEntry[1], GoodEntry[2], GoodEntry[3]}
+	assert.Error(t, UpTo(versions, MigrationName, times, readers, Builder), "We expect this to work with no error.")
+
+	// Good request
+	versions = []uint8{0, 1, 2, 3}
+	times = []time.Time{basetime.AddDate(0, 0, 0), basetime.AddDate(1, 0, 0), basetime.AddDate(2, 0, 0), basetime.AddDate(3, 0, 0)}
+	readers = []io.Reader{GoodEntry[0], GoodEntry[1], GoodEntry[2], GoodEntry[3]}
+	assert.NoError(t, UpTo(versions, MigrationName, times, readers, Builder), "We expect this to work with no error.")
 }
