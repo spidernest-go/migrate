@@ -47,15 +47,10 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 		return nil, err
 	}
 	stmt, err := db.Prepare(`
-				SELECT 
-					*
-				FROM 
-					__meta
-				ORDER BY 
-					applied DESC
-				LIMIT
-					1;
-				`)
+				SELECT *
+				FROM __meta
+				ORDER BY applied DESC
+				LIMIT 1`) // TODO: confirm as optimized as possible with ORDER BY statement existing
 	if err != nil {
 		return nil, err
 	}
