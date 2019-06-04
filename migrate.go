@@ -37,8 +37,10 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	}
 
 	// Track this migration being applied
-	// ALERT: Errors won't be allocated here simply because the migration has already been applied, so there is no point.
-	track(version, name, db)
+	err = track(version, name, nil, db)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -111,7 +113,11 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 		}
 
 		// track migration
-		track(v[i], n[i], db)
+
+		err = track(v[i], n[i], t[i], db)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
