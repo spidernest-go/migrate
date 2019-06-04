@@ -25,8 +25,10 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	if err := findtable(db); err != nil {
 		return err
 	}
+
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(r)
+
 	stmt, err := db.Prepare(buf.String())
 	if err != nil {
 		return fmt.Errorf("failed preparing statement '%s': %v", buf.String(), err)
@@ -41,6 +43,7 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -49,6 +52,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 	if err := findtable(db); err != nil {
 		return nil, err
 	}
+
 	stmt, err := db.Prepare(`
 				SELECT *
 				FROM __meta
@@ -57,6 +61,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed preparing meta table lookup statement: %v", err)
 	}
+
 	m := new(Migration)
 	err = stmt.QueryRow().Scan(&m.Applied, &m.Version, &m.Name)
 	if err == sql.ErrNoRows {
