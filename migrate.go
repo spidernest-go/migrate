@@ -123,6 +123,14 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 	return nil
 }
 
+func checkForMigration(name string, version uint8, db sqlbuilder.Database) error {
+	stmt, err := db.Prepare("SELECT * FROM __meta WHERE migration=? AND version=?")
+	if err != nil {
+		return fmt.Errorf("error preparing query statement for name and version check: %v", err)
+	}
+	return stmt.QueryRow(name, version).Scan()
+}
+
 func checkForMetaTable(database string, db sqlbuilder.Database) error {
 	// Check if the meta table exists
 	stmt, err := db.Prepare(`
