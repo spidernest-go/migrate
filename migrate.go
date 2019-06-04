@@ -147,7 +147,8 @@ func checkForMigration(name string, version uint8, db sqlbuilder.Database) error
 	if err != nil {
 		return err
 	}
-	return stmt.QueryRow(name, version).Scan()
+	m := *new(Migration)
+	return stmt.QueryRow(name, version).Scan(&m.Applied, &m.Version, &m.Name)
 }
 
 func checkForMetaTable(database string, db sqlbuilder.Database) error {
