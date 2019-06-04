@@ -21,6 +21,12 @@ type Migration struct {
 	Name    string    `db:"migration"`
 }
 
+var (
+	ErrEmptyArgument  = errors.New("an argument passed is empty")
+	ErrUnevenLength   = errors.New("an argument passed does not match the length of the other arguments")
+	ErrMigrationOrder = errors.New("migration order supplied is not sorted properly")
+)
+
 func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv ...interface{}) error {
 	if err := findtable(db); err != nil {
 		return err
