@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -21,6 +22,12 @@ type Migration struct {
 	Name    string    `db:"migration"`
 }
 
+var (
+	ErrEmptyArgument  = errors.New("an argument passed is empty")
+	ErrUnevenLength   = errors.New("an argument passed does not match the length of the other arguments")
+	ErrMigrationOrder = errors.New("migration order supplied is not sorted properly")
+)
+
 func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv ...interface{}) error {
 	if err := findtable(db); err != nil {
 		return err
@@ -31,11 +38,11 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 
 	stmt, err := db.Prepare(buf.String())
 	if err != nil {
-		return fmt.Errorf("failed preparing statement '%s': %v", buf.String(), err)
+		return err
 	}
 	_, err = stmt.Exec(argv...)
 	if err != nil {
-		return fmt.Errorf("failed executing query '%s': %v", buf.String(), err)
+		return err
 	}
 
 	// Track this migration being applied
@@ -59,7 +66,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 				ORDER BY applied DESC
 				LIMIT 1`) // TODO: confirm as optimized as possible with ORDER BY statement existing
 	if err != nil {
-		return nil, fmt.Errorf("failed preparing meta table lookup statement: %v", err)
+		return nil, err
 	}
 
 	m := new(Migration)
@@ -67,7 +74,7 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
-		return nil, fmt.Errorf("failed querying last migration: %v", err)
+		return nil, err
 	} else {
 		return m, nil
 	}
@@ -84,10 +91,10 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 
 	// confirm valid migrations passed
 	if len(v) == 0 || len(n) == 0 || len(t) == 0 || len(r) == 0 {
-		return fmt.Errorf("an argument array passed into function")
+		return ErrEmptyArgument
 	}
 	if len(v) != len(n) && len(n) != len(t) && len(t) != len(r) {
-		return fmt.Errorf("argument array lengths are uneven")
+		return ErrUnevenLength
 	}
 	m, err := Last(db)
 	if err != nil {
@@ -100,7 +107,7 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 			}
 		} else {
 			if !(t[i-1].Before(t[i]) && v[i-1] < v[i]) {
-				return fmt.Errorf("migration %d does not occur after migration %d", i, i-1)
+				return ErrMigrationOrder
 			}
 		}
 	}
@@ -116,11 +123,11 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 			// apply migration
 			stmt, err = db.Prepare(buf.String())
 			if err != nil {
-				return fmt.Errorf("migration %d failed preparing statement %s: %v", i, buf.String(), err)
+				return err
 			}
 			_, err = stmt.Exec()
 			if err != nil {
-				return fmt.Errorf("migration %d failed executing statement %s: %v", i, buf.String(), err)
+				return err
 			}
 
 			// track migration
@@ -129,7 +136,7 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 				return err
 			}
 		} else if err != nil { // it was an error with checking for the migration...
-			return fmt.Errorf("error checking for migration in meta table: %v", err)
+			return err
 		}
 	}
 
@@ -139,7 +146,7 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 func checkForMigration(name string, version uint8, db sqlbuilder.Database) error {
 	stmt, err := db.Prepare("SELECT * FROM __meta WHERE migration=? AND version=?")
 	if err != nil {
-		return fmt.Errorf("error preparing query statement for name and version check: %v", err)
+		return err
 	}
 	return stmt.QueryRow(name, version).Scan()
 }
@@ -152,7 +159,7 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
             AND table_name = ?
         LIMIT 1;`)
 	if err != nil {
-		return fmt.Errorf("error preparing information_schema table query: %v", err)
+		return err
 	}
 
 	// If it doesn't, create it
@@ -167,17 +174,17 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
                 migration VARCHAR(256)
                 )`)
 		if err != nil {
-			return fmt.Errorf("error preparing meta table prepare statement: %v", err)
+			return err
 		}
 		_, err = stmt.Exec()
 		if err != nil {
-			return fmt.Errorf("error in executing meta table creation statement: %v", err)
+			return err
 		}
 		tableExists = true
 		return nil
 	} else if err != nil {
 		// Otherwise fail.
-		return fmt.Errorf("error scanning meta table: %v", err)
+		return err
 	} else {
 		return nil
 	}
@@ -203,7 +210,7 @@ func track(version uint8, name string, applied interface{}, db sqlbuilder.Databa
 		stmt.Exec(version, name)
 	}
 	if err != nil {
-		return fmt.Errorf("error adding migration to meta table: %v", err)
+		return err
 	}
 	return nil
 }
