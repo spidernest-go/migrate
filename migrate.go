@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"time"
 
