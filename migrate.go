@@ -37,8 +37,10 @@ func Apply(version uint8, name string, r io.Reader, db sqlbuilder.Database, argv
 	}
 
 	// Track this migration being applied
-	// ALERT: Errors won't be allocated here simply because the migration has already been applied, so there is no point.
-	track(version, name, db)
+	err = track(version, name, nil, db)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -111,7 +113,11 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 		}
 
 		// track migration
-		track(v[i], n[i], db)
+
+		err = track(v[i], n[i], t[i], db)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -158,13 +164,27 @@ func checkForMetaTable(database string, db sqlbuilder.Database) error {
 }
 
 // Track this migration being applied
-func track(version uint8, name string, db sqlbuilder.Database) {
-	// ALERT: Errors won't be allocated here simply because the migration has already been applied, so there is no point.
-	stmt, _ := db.Prepare(`
-		INSERT
-			INTO __meta (version, migration)
-			VALUES (?, ?)`)
-	stmt.Exec(version, name)
+func track(version uint8, name string, applied interface{}, db sqlbuilder.Database) error {
+	var stmt *sql.Stmt
+	var err error
+	switch t := applied.(type) {
+	case time.Time:
+		stmt, err = db.Prepare(`
+			INSERT
+				INTO __meta (version, migration, applied)
+				VALUES (?, ?, ?)`)
+		stmt.Exec(version, name, t)
+	default:
+		stmt, err = db.Prepare(`
+			INSERT
+				INTO __meta (version, migration)
+				VALUES (?, ?)`)
+		stmt.Exec(version, name)
+	}
+	if err != nil {
+		return fmt.Errorf("error adding migration to meta table: %v", err)
+	}
+	return nil
 }
 
 func findtable(db sqlbuilder.Database) error {
