@@ -69,6 +69,9 @@ func Last(db sqlbuilder.Database) (*Migration, error) {
 }
 
 func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Database) error {
+	var stmt *sql.Stmt
+	var err error
+
 	// confirm table exists
 	if err := findtable(db); err != nil {
 		return err
@@ -98,25 +101,30 @@ func UpTo(v []uint8, n []string, t []time.Time, r []io.Reader, db sqlbuilder.Dat
 	}
 
 	for i := range r {
-		// read in migration
-		buf := new(bytes.Buffer)
-		buf.ReadFrom(r[i])
 
-		// apply migration
-		stmt, err := db.Prepare(buf.String())
-		if err != nil {
-			return fmt.Errorf("migration %d failed preparing statement %s: %v", i, buf.String(), err)
-		}
-		_, err = stmt.Exec()
-		if err != nil {
-			return fmt.Errorf("migration %d failed executing statement %s: %v", i, buf.String(), err)
-		}
+		err = checkForMigration(n[i], v[i], db)
+		if err == sql.ErrNoRows { // the migration doesn't already exist so lets apply it
+			// read in migration
+			buf := new(bytes.Buffer)
+			buf.ReadFrom(r[i])
 
-		// track migration
+			// apply migration
+			stmt, err = db.Prepare(buf.String())
+			if err != nil {
+				return fmt.Errorf("migration %d failed preparing statement %s: %v", i, buf.String(), err)
+			}
+			_, err = stmt.Exec()
+			if err != nil {
+				return fmt.Errorf("migration %d failed executing statement %s: %v", i, buf.String(), err)
+			}
 
-		err = track(v[i], n[i], t[i], db)
-		if err != nil {
-			return err
+			// track migration
+			err = track(v[i], n[i], t[i], db)
+			if err != nil {
+				return err
+			}
+		} else if err != nil { // it was an error with checking for the migration...
+			return fmt.Errorf("error checking for migration in meta table: %v", err)
 		}
 	}
 
